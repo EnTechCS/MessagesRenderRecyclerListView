@@ -7,7 +7,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import {useChatStore} from '../store/chatStoreProvider';
 import {UserContextProvider} from '../../user/userHook';
 import {generateItems} from './messageBrainer';
-import MessageEach from './messages';
+import {useMessagesRenderHook} from './messagesRenderHook';
 
 const styles = StyleSheet.create({
   scrollHelper: {
@@ -32,7 +32,15 @@ const styles = StyleSheet.create({
 const MessagesRenderRecyclerListView = observer(props => {
   const {chatStore} = useChatStore();
   const forwardRef = useRef();
-  const renderPropsMemo = useMemo(() => props, [props]);
+  const {
+    renderPropsMemo,
+    scroller,
+    renderMessage,
+    handleOnScroll,
+    getMoreMessages,
+    renderListEmptyComponent,
+    setMessagesRendererRef,
+  } = useMessagesRenderHook(props);
   const messagesMemo = useMemo(() => {
     // https://github.com/mobxjs/mobx/discussions/3348#discussioncomment-2470109
     return computed(() =>
@@ -56,16 +64,8 @@ const MessagesRenderRecyclerListView = observer(props => {
     [messagesMemo],
   );
 
-  const renderMessage = useCallback((type, data) => {
-    return (
-      <View
-        style={{
-          transform: [{scaleY: -1}],
-          width: '100%',
-        }}>
-        <MessageEach message={data} messageTest={false} />
-      </View>
-    );
+  const renderItem = useCallback((type, data) => {
+    return renderMessage({message: data});
   }, []);
 
   const scrollToBottom = () => {
@@ -81,20 +81,29 @@ const MessagesRenderRecyclerListView = observer(props => {
 
   return (
     <ToRenderLayer>
-      <RecyclerListView
-        style={{
-          flex: 1,
-          paddingTop: 20,
-          paddingBottom: 20,
-          transform: [{scaleY: -1}],
-        }}
-        isHorizontal={false}
-        layoutProvider={layoutProvider}
-        dataProvider={dataProvider}
-        forceNonDeterministicRendering={true}
-        canChangeSize={true}
-        rowRenderer={renderMessage}
-      />
+      {!messagesMemo.length ? (
+        renderListEmptyComponent({invert: true})
+      ) : (
+        <RecyclerListView
+          ref={setMessagesRendererRef}
+          style={{
+            flex: 1,
+            paddingTop: 20,
+            paddingBottom: 20,
+            transform: [{scaleY: -1}],
+          }}
+          isHorizontal={false}
+          layoutProvider={layoutProvider}
+          dataProvider={dataProvider}
+          forceNonDeterministicRendering={true}
+          canChangeSize={true}
+          onEndReachedThreshold={0.5}
+          rowRenderer={renderItem}
+          onEndReached={getMoreMessages}
+          onScroll={handleOnScroll}
+        />
+      )}
+
       {chatStore.showScrollHelper === true && (
         <TouchableOpacity style={styles.scrollHelper} onPress={scrollToBottom}>
           <Feather
@@ -105,6 +114,7 @@ const MessagesRenderRecyclerListView = observer(props => {
           />
         </TouchableOpacity>
       )}
+      {scroller()}
     </ToRenderLayer>
   );
 });
